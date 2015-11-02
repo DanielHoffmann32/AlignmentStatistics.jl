@@ -1,3 +1,3 @@
 # AlignmentStatistics
 
-Julia package for statistical analysis of sequence alignments.
+Julia package for statistical analyses of sequence alignments.
