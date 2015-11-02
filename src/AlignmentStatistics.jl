@@ -61,9 +61,10 @@ function majority_consensus(seqs::Array{ASCIIString,2})
                      
     for i in 1:n_cols
         coltab = countmap(seqs[:,i])
-        maxval = maximum(collect(values(coltab)))
+        vals = collect(values(coltab))
+        maxval = maximum(vals)
         maxcount[i] = maxval
-        maxelem[i] = coltab.keys[coltab.vals .== maxval][1]
+        maxelem[i] = collect(keys(coltab))[vals .== maxval][1]
     end
 
     return maxelem, maxcount, (convert(Array{Float64,1},maxcount) ./ n_rows)
