@@ -137,7 +137,7 @@ end
 """
 Input: two sequence sets, seqsA and seqsB, and a sequence of reference symbols, ref_syms.
 
-Optionally: choose an option for multiple-comparison correction (default is :none), e.g. :benjaminiHochberg for FDR (see package PValueAdjust).
+Optionally: set last parameter (FDR) true to correct for multiple testing by control of false discovery rate (method of Benjamini and Hochberg).
 
 Output: p-values from Fisher's exact test carried out for each column;
     we test with 2x2 contingency table:
@@ -148,7 +148,7 @@ function Fisher_test_sequence_sets(
     seqsA::Array{ASCIIString,2}, 
     seqsB::Array{ASCIIString,2},
     ref_syms::Array{ASCIIString,1},
-    p_adjust_method::Any = :none                               
+    FDR::Bool=false 
 )
     rowsA, colsA = size(seqsA)
     rowsB, colsB = size(seqsB)
@@ -172,8 +172,12 @@ function Fisher_test_sequence_sets(
         end
     end
 
-    #return p-values, if user chooses also corrected for multiple testing
-    return padjust(pvals, method = p_adjust_method)
+    if FDR==true #if user wishes FDR correction for multiple testing
+        return PValueAdjust.padjust(pvals, BenjaminiHochberg)
+    else #no correction
+        return pvals
+    end
+
 end
 
 end # module
