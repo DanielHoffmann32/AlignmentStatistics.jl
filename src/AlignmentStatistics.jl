@@ -37,7 +37,7 @@ end
 Returns sequence labels from sequences read with FastaIO.readall (without the leading '>').
 """
 function get_seq_labels(raw_ali::Array{Any,1})
-    return map(x -> x[1], raw_ali[1:end])
+    return convert(Array{ASCIIString,1},map(x -> x[1], raw_ali[1:end]))
 end
 
 
@@ -90,7 +90,7 @@ Input:
 
 Output: array of extracted label elements (ASCIIStrings)
 """
-function extract_label_element(labels::Array{Any,1}, delim::ASCIIString, elno::Int64)
+function extract_label_element(labels::Array{ASCIIString,1}, delim::ASCIIString, elno::Int64)
     return map(x -> x[elno], map(x -> split(x,delim), labels))
 end
 
@@ -100,7 +100,7 @@ Input: array of labels.
 
 Output: 2D array with labels in first row and frequencies in second, sorted according to decreasing frequency.
 """
-function sorted_label_frequencies(labels::Array{Any, 1})
+function sorted_label_frequencies(labels::Array{ASCIIString, 1})
     label_counts = countmap(labels)
     p = sortperm(collect(values(label_counts)),rev=true)
     return permute!(collect(keys(label_counts)), p), permute!(collect(values(label_counts)), p)
@@ -181,6 +181,40 @@ function Fisher_test_sequence_sets(
 
 end
 
+"""
+    Computes column labels of a multiple sequence alignment based on a reference sequence
+
+    Input:
+    - label of reference sequence (FASTA header without "")
+    - array of all labels (1D ASCII string array)
+    - sequence array (2D ASCII array)
+
+    Output: Labels for each column:
+    - columns in which the reference sequence has a letter are labelled with the number of this letter in the sequence (without gaps)
+    - columns in which the reference sequence has a gap are labelled with the number of the closest left neighbor letter and the number of gap symbols to the current column
+"""
+
+function reference_sequence_column_labels(ref_label::ASCIIString,
+                                          labels::Array{ASCIIString,1},
+                                          seqs::Array{ASCIIString,2})
+    ref_seq = vec(seqs[labels .== ref_label,:])
+    ali_len = length(ref_seq)
+    res_num = 0
+    gap_num = 1
+    ref_col = fill(" ", ali_len)
+    for i in 1:ali_len
+        if ref_seq[i] == "-"
+            ref_col[i] = join([string(res_num),".",string(gap_num)],"")
+            gap_num += 1
+        else
+            gap_num = 1
+            res_num += 1
+            ref_col[i] = string(res_num)
+        end 
+    end 
+    return ref_col
+end
+    
 end # module
 
 
