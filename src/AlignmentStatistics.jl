@@ -246,14 +246,18 @@ end
 
     Output: three arrays
     - fractions of successes
-    - lower boundaries of 95% confidence intervals
-    - upper boundaries of 95% confidence intervals 
+    - lower boundaries of 95% confidence intervals (CIs)
+    - upper boundaries of 95% confidence intervals
+
+    If no x = n or x = 0, the CIs have a width of zero
 """
 function fractions_and_binomial_CIs(x::Array{Int64,1}, n::Array{Int64,1})
 
     len = length(x)
     if (len != length(n))
         error("lengths of x and n do not match")
+    elseif sum(x .> n) > 0
+        error("x > n")
     end
     
     fraction = zeros(len)
@@ -263,7 +267,11 @@ function fractions_and_binomial_CIs(x::Array{Int64,1}, n::Array{Int64,1})
     for j in 1:len
         if ((!isnan(n[j])) & (n[j] != 0))
             fraction[j] = x[j]/n[j]
-            if (x[j] != 0) & (x[j] != n[j])
+            if x[j] == n[j]
+                (lowerCI[j],upperCI[j]) = (1.0,1.0)
+            elseif x[j] == 0
+                (lowerCI[j],upperCI[j]) = (0.0,0.0)                
+            else 
                 (lowerCI[j],upperCI[j]) = ci(BinomialTest(x[j],n[j]))
             end
         else
