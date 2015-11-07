@@ -10,7 +10,9 @@ export rectangularize_ali,
           extract_label_element,
           sorted_label_frequencies,
           symbols_in_seqs,
-          Fisher_test_sequence_sets
+          Fisher_test_sequence_sets,
+          export_fasta,
+          binomial_CIs
           
 """
 Takes an alignment, as read by FastaIO.readall, and appends gap symbols '-' to shorter sequences to make all sequences the same length. Returns this rectangularized sequence array.
@@ -214,7 +216,64 @@ function reference_sequence_column_labels(ref_label::ASCIIString,
     end 
     return ref_col
 end
+
+"""
+    Input:
+    - filename for fasta export
+    - label vector (1D ASCIIString array)
+    - sequence vector (2D ASCIIString array)
+
+    Output:
+    writes a fasta file with given labels as headers
+"""   
+function export_fasta(
+                                filename::ASCIIString,
+                                labels::Array{ASCIIString,1},
+                                seqs::Array{ASCIIString,2}
+                                )
+    n_seqs = length(labels)
+    to_export = Array(Any,n_seqs)
+    for i in 1:n_seqs
+        to_export[i] = (labels[i], join(collect(seqs[i,:]),""))
+    end
+    writefasta(filename, to_export)
+end
+
+"""
+    Input:
+    - array of successes x (Int64)
+    - array of trials n (Int64)
+
+    Output: three arrays
+    - fractions of successes
+    - lower boundaries of 95% confidence intervals
+    - upper boundaries of 95% confidence intervals 
+"""
+function fractions_and_binomial_CIs(x::Array{Int64,1}, n::Array{Int64,1})
+
+    len = length(x)
+    if (len != length(n))
+        error("lengths of x and n do not match")
+    end
     
+    fraction = zeros(len)
+    lowerCI = zeros(len)
+    upperCI = zeros(len)
+    
+    for j in 1:len
+        if ((!isnan(n[j])) & (n[j] != 0))
+            fraction[j] = x[j]/n[j]
+            if (x[j] != 0) & (x[j] != n[j])
+                (lowerCI[j],upperCI[j]) = ci(BinomialTest(x[j],n[j]))
+            end
+        else
+            fraction[j] = NA
+        end 
+    end
+
+    return fraction, lowerCI, upperCI
+end
+
 end # module
 
 
