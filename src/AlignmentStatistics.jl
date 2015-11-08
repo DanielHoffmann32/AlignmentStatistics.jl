@@ -140,7 +140,9 @@ end
 """
 Input: two sequence sets, seqsA and seqsB, and a sequence of reference symbols, ref_syms.
 
-Optionally: set last parameter (FDR) true to correct for multiple testing by control of false discovery rate (method of Benjamini and Hochberg).
+Optionally:
+- set parameter 'FDR' true to correct for multiple testing by control of false discovery rate (method of Benjamini and Hochberg); default value is false.
+- choose 'tail' of Fisher test between :left, :both, and :right
 
 Output: p-values from Fisher's exact test carried out for each column;
     we test with 2x2 contingency table:
@@ -150,8 +152,9 @@ Output: p-values from Fisher's exact test carried out for each column;
 function Fisher_test_sequence_sets(
     seqsA::Array{ASCIIString,2}, 
     seqsB::Array{ASCIIString,2},
-    ref_syms::Array{ASCIIString,1},
-    FDR::Bool=false 
+    ref_syms::Array{ASCIIString,1};
+    FDR::Bool=false,
+    tail=:both
 )
     rowsA, colsA = size(seqsA)
     rowsB, colsB = size(seqsB)
@@ -169,7 +172,7 @@ function Fisher_test_sequence_sets(
         nAx = count(y -> y == x, seqsA[:,i])
         nBx = count(y -> y == x, seqsB[:,i])
         if nAx + nBx != 0 && (nAx != rowsA || nBx != rowsB)
-            pvals[i] = pvalue(FisherExactTest(nAx, rowsA-nAx, nBx, rowsB-nBx))
+            pvals[i] = pvalue(FisherExactTest(nAx, rowsA-nAx, nBx, rowsB-nBx),tail=tail)
         else
             pvals[i] = 1.0
         end
