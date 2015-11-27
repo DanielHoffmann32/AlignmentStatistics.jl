@@ -3,21 +3,31 @@ module AlignmentStatistics
 # package code goes here
 using FastaIO, StatsBase, HypothesisTests, PValueAdjust
 
-export rectangularize_ali,
-          get_seq_labels,
+export rectangularize_alignment,
+          get_sequence_labels,
           majority_consensus,
           sequence_composition,
           extract_label_element,
           sorted_label_frequencies,
-          symbols_in_seqs,
+          symbols_in_sequences,
           Fisher_test_sequence_sets,
           export_fasta,
-          binomial_CIs
+          binomial_CIs,
+          split_fasta_sequences
           
+
+"""
+Input: fasta data read with FastaIO function readfasta.
+Output: sequences split up into single characters.
+"""
+function split_fasta_sequences(fasta::Array{Any,1})
+    return map(i -> convert(Array{AbstractString,1},split(fasta[i][2],"")), 1:length(fasta))
+end
+       
 """
 Takes an alignment, as read by FastaIO.readall, and appends gap symbols '-' to shorter sequences to make all sequences the same length. Returns this rectangularized sequence array.
 """
-function rectangularize_ali(raw_ali::Array{Any,1})
+function rectangularize_alignment(raw_ali::Array{Any,1})
     seqs = map(x -> convert(Array{AbstractString,1},split(x[2],"")), raw_ali[1:end])
     maxlen = maximum(map(x -> length(x), seqs))
     
@@ -38,7 +48,7 @@ end
 """
 Returns sequence labels from sequences read with FastaIO.readall (without the leading '>').
 """
-function get_seq_labels(raw_ali::Array{Any,1})
+function get_sequence_labels(raw_ali::Array{Any,1})
     return convert(Array{ASCIIString,1},map(x -> x[1], raw_ali[1:end]))
 end
 
@@ -123,7 +133,7 @@ Output:
 (2) relative frequency of symbols in respective columns of seqs (absolute / n_rows).
 
 """
-function symbols_in_seqs(symbols::Array{ASCIIString,1}, seqs::Array{ASCIIString,2})
+function symbols_in_sequences(symbols::Array{ASCIIString,1}, seqs::Array{ASCIIString,2})
 
     n_rows, n_cols = size(seqs)
 
@@ -172,7 +182,7 @@ function Fisher_test_sequence_sets(
         nAx = count(y -> y == x, seqsA[:,i])
         nBx = count(y -> y == x, seqsB[:,i])
         if nAx + nBx != 0 && (nAx != rowsA || nBx != rowsB)
-            pvals[i] = pvalue(FisherExactTest(nAx, rowsA-nAx, nBx, rowsB-nBx),tail=tail)
+            pvals[i] = pvalue(FisherExactTest(nAx, rowsA-nAx, nBx, rowsB-nBx), tail=tail)
         else
             pvals[i] = 1.0
         end
