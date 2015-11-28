@@ -23,6 +23,14 @@ Output: sequences split up into single characters.
 function split_fasta_sequences(fasta::Array{Any,1})
     return map(i -> convert(Array{AbstractString,1},split(fasta[i][2],"")), 1:length(fasta))
 end
+
+"""
+Input: fasta data (in general multiple sequences) read with FastaIO function readfasta.
+Output: vector of sequences lengths.
+"""
+function fasta_lengths(fasta::Array{Any,1})
+    return map(i -> length(fasta[i][2]), 1:length(fasta))
+end
        
 """
 Takes an alignment, as read by FastaIO.readall, and appends gap symbols '-' to shorter sequences to make all sequences the same length. Returns this rectangularized sequence array.
