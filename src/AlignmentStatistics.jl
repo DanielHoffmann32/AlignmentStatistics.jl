@@ -1,32 +1,50 @@
 module AlignmentStatistics
 
 # package code goes here
-using FastaIO, StatsBase, HypothesisTests, PValueAdjust
+using FastaIO, StatsBase, HypothesisTests, PValueAdjust, DataFrames
 
 export rectangularize_alignment,
-          get_sequence_labels,
-          majority_consensus,
-          sequence_composition,
-          extract_label_element,
-          sorted_label_frequencies,
-          symbols_in_sequences,
-          Fisher_test_sequence_sets,
-          export_fasta,
-          binomial_CIs,
-          split_fasta_sequences
+get_sequence_labels,
+majority_consensus,
+sequence_composition,
+extract_label_element,
+sorted_label_frequencies,
+symbols_in_sequences,
+Fisher_test_sequence_sets,
+export_fasta,
+binomial_CIs,
+split_fasta_sequences,
+AAindex1_to_Dict,
+sequences_to_numerical_properties,
+read_AAindex1
           
 
 """
-Input: fasta data read with FastaIO function readfasta.
+Input: fasta data read with FastaIO function readfasta
+
 Output: sequences split up into single characters.
+    
 """
 function split_fasta_sequences(fasta::Array{Any,1})
     return map(i -> convert(Array{AbstractString,1},split(fasta[i][2],"")), 1:length(fasta))
 end
 
 """
-Input: fasta data (in general multiple sequences) read with FastaIO function readfasta.
-Output: vector of sequences lengths.
+Input: array of strings (=sequences)
+
+Output: sequences split up into single characters.
+
+    Hint: if you have read the sequences from a fasta file with readfasta (package FastaIO), use split_fasta_sequences instead of split_sequences.
+
+"""
+function split_sequences(seqs::Any)
+    return map(i -> convert(Array{AbstractString,1},split(seqs[i],"")), 1:length(seqs))
+end
+    
+"""
+    Input: fasta data (in general multiple sequences) read with FastaIO function readfasta.
+
+    Output: vector of sequences lengths.
 """
 function fasta_lengths(fasta::Array{Any,1})
     return map(i -> length(fasta[i][2]), 1:length(fasta))
@@ -301,6 +319,59 @@ function fractions_and_binomial_CIs(x::Array{Int64,1}, n::Array{Int64,1})
     end
 
     return fraction, lowerCI, upperCI
+end
+
+"""
+   Input:
+            
+     - translation dictionary (AA -> numerical property)
+
+     - sequences (array of arrays of strings)
+
+   Output:
+            
+     - sequences translated to array of array of numerical properties
+            
+"""
+function sequences_to_numerical_properties(trans::Dict, seqs::Array{Array{AbstractString,1},1})
+    nseqs = length(seqs)
+    props = Array{Any}(nseqs)
+    for i in 1:nseqs
+        props[i] = map(aa -> trans[aa], seqs[i])
+    end
+    return convert(Array{Array{Float64,1}},props)
+end
+
+"""
+  Input:
+            
+     - AAindex1 data frame (see function read_AAindex1()
+
+     - index to be used
+
+  Output:
+
+     - dictionary relating AAs with numbers (e.g. "A" => 3.95, ...)
+         
+"""
+function AAindex1_to_Dict(AAindex1::DataFrame, ix::Int64)
+    nAAs = 20 
+    offset = 2
+    AAs = map(x->string(x), names(AAindex1)[3:22])
+    trans =
+         [AAs[i] => convert(Float64,AAindex1[ix, i+offset]) for i in 1:nAAs]
+    return trans
+end
+
+"""
+   Input: none (reads file AAindex1.csv from data directory of
+         package AlignmentStatistics)
+
+   Output: DataFrame of AAindex1
+         
+"""
+function read_AAindex1()
+    readtable(Pkg.dir("AlignmentStatistics","data","AAindex1.csv"))
 end
 
 end # module
