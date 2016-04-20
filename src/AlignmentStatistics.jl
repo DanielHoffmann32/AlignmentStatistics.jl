@@ -1,7 +1,8 @@
 module AlignmentStatistics
 
 # package code goes here
-using FastaIO, StatsBase, HypothesisTests, PValueAdjust, DataFrames
+using FastaIO, StatsBase, HypothesisTests, PValueAdjust,
+DataFrames, Distributions
 
 export rectangularize_alignment,
 get_sequence_labels,
@@ -14,9 +15,13 @@ Fisher_test_sequence_sets,
 export_fasta,
 binomial_CIs,
 split_fasta_sequences,
+split_sequences,
 AAindex1_to_Dict,
 sequences_to_numerical_properties,
-read_AAindex1
+read_AAindex1,
+Dirichlet_K3,
+sequence_composition,
+sequence_composition_difference
           
 
 """
@@ -373,6 +378,101 @@ end
 function read_AAindex1()
     readtable(Pkg.dir("AlignmentStatistics","data","AAindex1.csv"))
 end
+
+"""
+Input:
+         
+ - Three element Float64 array alpha, e.g. probabilities or counts of an AA to have charge -1, 0, 1.
+   All elements should be positive.
+
+ - Optional: minimum probability pmin, maximum probability pmax, number of steps np.
+
+Output:
+
+ - Array of probability densities computed for a Dirichlet distribution with concentration parameter
+     vector alpha, evaluated at (p_m1 = pmin, ..., pmax; p_0 = pmin, ..., pmax; p_1 = 1.0-p_m1-p_0).
+     This can e.g. correspond to the probabilities for the three charge states -1 (m1), 0 and 1.
+         
+"""
+function Dirichlet_K3(alpha::Array{Float64,1}; pmin::Float64=0.01, pmax::Float64=0.99, np::Int64=100)
+    if length(alpha) != 3
+        error("needs alpha of length 3")
+    elseif sum(alpha .<= 0.0) != 0
+        error("all elements of alpha must be > 0")
+    elseif (pmin <= 0.) | (pmax <= 0.) 
+        error("pmin and pmax must be positive")
+    elseif pmax <= pmin
+        error("pmax must be > pmin")
+    end
+    
+    p_m1 = linspace(pmin,pmax,np)
+    p_0 = linspace(pmin,pmax,np)
+    pDir = zeros(np,np)
+    for i in 1:np 
+        pm1 = p_m1[i]
+        for j in 1:np
+            p0 = p_0[j]
+            if pm1 + p0 >= 1.
+                break
+            end
+            p1 = 1.0 - pm1 - p0
+            pDir[i,j] = pdf(Dirichlet(alpha),[pm1;p0;p1])
+        end
+    end
+    return collect(p_m1), collect(p_0), pDir
+end
+
+AAs = ["A";"C";"D";"E";"F";"G";"H";"I";"K";"L";"M";"N";"P";"Q";"R";"S";"T";"V";"W";"Y"]
+DNAs = ["A";"C";"G";"T"]
+RNAs = ["A";"C";"G";"U"]
+
+"""
+Input:
+         - string s (either ASCIIString or Array{ASCIIString,1})
+         - alphabet
+
+Output:
+         DataFrame with columns:
+         - alphabet: elements of the alphabet
+         - abs: absolute frequency of each element of the alphabet in s
+         - rel: relative frequency of each element of the alphabet in s
+
+         Note that the relative frequency does add up to 1.
+         The absolute frequency is lower than the number of characters in s if s
+             contains characters that are not elements of the alphabet.
+"""
+function sequence_composition(s::Any, alphabet::Array{ASCIIString,1})
+    if typeof(s)==ASCIIString
+        a = split(s,"")
+    elseif typeof(s) != Array{ASCIIString,1}
+        error("input has to be ASCIIString or Array{ASCIIString,1}")
+    end 
+    n = length(alphabet)
+    c = zeros(Int64,n)
+    i = 1
+    result = DataFrame(alphabet = alphabet , abs = zeros(Int64,n), rel = zeros(n))
+    for letter in alphabet
+        c[i] = count(x -> x==letter, a)
+        i+=1
+    end
+    result[:abs] = c
+    result[:rel] = c/sum(c)
+    result
+end
+
+"""
+Input: two DataFrames as returned by function sequence_composition, one DataFrame
+    for each sequence s1 and s2
+
+Output: \sum_{i \in alphabet} |f_i(s_1)-f_i(s_2)| with relative frequencies f_i
+
+"""
+function sequence_composition_difference(c1::DataFrame, c2::DataFrame)
+    if c1[:alphabet] != c2[:alphabet]
+        error("different alphabets")
+    end
+    sum(abs(c1[:rel] .- c2[:rel]))
+end 
 
 end # module
 
