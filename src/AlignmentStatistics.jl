@@ -4,24 +4,25 @@ module AlignmentStatistics
 using FastaIO, StatsBase, HypothesisTests, PValueAdjust,
 DataFrames, Distributions
 
-export rectangularize_alignment,
-get_sequence_labels,
-majority_consensus,
-sequence_composition,
+export AAindex1_to_Dict,
+binomial_CIs,
+clean_sequences,
+Dirichlet_K3,
+export_fasta,
 extract_label_element,
 sorted_label_frequencies,
-symbols_in_sequences,
 Fisher_test_sequence_sets,
-export_fasta,
-binomial_CIs,
+get_sequence_labels,
+majority_consensus,
+read_AAindex1,
+rectangularize_alignment,
+sequence_composition,
+sequence_composition_difference,
+sequence_lengths,
 split_fasta_sequences,
 split_sequences,
-AAindex1_to_Dict,
-sequences_to_numerical_properties,
-read_AAindex1,
-Dirichlet_K3,
-sequence_composition,
-sequence_composition_difference
+symbols_in_sequences,
+sequences_to_numerical_properties
           
 
 """
@@ -32,6 +33,66 @@ Output: sequences split up into single characters.
 """
 function split_fasta_sequences(fasta::Array{Any,1})
     return map(i -> convert(Array{AbstractString,1},split(fasta[i][2],"")), 1:length(fasta))
+end
+
+"""
+Can apply the following operations to sequences read with FastaIO.readfasta:
+
+1. remove last char of each sequence (often "*"),
+
+2. remove sequences that contain any of a set of given substrings, e.g. "X".
+
+3. remove sequences that have a length different from a required length
+
+
+Input:
+
+- fasta array as read with FastaIO.readfasta
+
+- optionally: should last character be removed of each sequence (default: remove_last_char=false); removing the last character is done first (if requested)
+
+- optionally: remove sequences with any of the given strings (default: remove_seqs_with=["X", "\#", "*"])
+
+- optionally: remove sequences with a length different from a required length (default: required_length = 0, i.e. option switched off)
+
+Output:
+
+- Cleaned-up fasta (works with a copy of the original data)
+
+"""
+function clean_sequences(fasta::Array{Any,1};
+                         remove_last_char::Bool=false,
+                         remove_seqs_with::Array{ASCIIString,1}=["X","#","*"],
+                         required_length::Int64=0)
+    n_seqs=length(fasta)
+    new_fasta = copy(fasta)
+    clean_seqs = fill(true, n_seqs)
+    n_removal_triggers = length(remove_seqs_with)
+    if remove_last_char
+        for i in 1:n_seqs
+            new_fasta[i] = (new_fasta[i][1], new_fasta[i][2][1:(end-1)])
+        end
+    end
+    for i in 1:n_seqs
+        for j in 1:n_removal_triggers
+            if contains(new_fasta[i][2],remove_seqs_with[j]) 
+                clean_seqs[i] = false
+                break
+            end
+        end
+    end
+    if required_length != 0
+        for i in 1:n_seqs
+            for j in 1:n_removal_triggers
+                if (clean_seqs[i] == true) &
+                   (length(new_fasta[i][2])!=required_length)
+                    clean_seqs[i] = false
+                    break
+                end
+            end
+        end
+    end
+    return new_fasta[clean_seqs]
 end
 
 """
@@ -473,6 +534,22 @@ function sequence_composition_difference(c1::DataFrame, c2::DataFrame)
     end
     sum(abs(c1[:rel] .- c2[:rel]))
 end 
+
+"""
+Sequence length distribution (as table) in a fasta array, read with FastaIO.readfasta.
+
+Input:
+
+- fasta array
+
+Output:
+
+- table of sequence lengths, generated with countmap
+             
+"""
+function sequence_lengths(fasta::Array{Any,1})
+    countmap(map(x->length(fasta[x][2]), 1:length(fasta)))
+end
 
 end # module
 
