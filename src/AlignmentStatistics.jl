@@ -1,8 +1,8 @@
 module AlignmentStatistics
 
 # package code goes here
-using FastaIO, StatsBase, HypothesisTests, PValueAdjust,
-DataFrames, Distributions
+using Bio, Bio.Structure, FastaIO, StatsBase, HypothesisTests, PValueAdjust,
+DataFrames, Distributions, GaussDCA
 
 export AAindex1_to_Dict,
 binomial_CIs,
@@ -14,8 +14,11 @@ sorted_label_frequencies,
 Fisher_test_sequence_sets,
 get_sequence_labels,
 majority_consensus,
+PDB_AA_to_1_letter_code,
+PDB_to_single_chain_fasta,
 read_AAindex1,
 rectangularize_alignment,
+reference_sequence_column_labels,
 sequence_composition,
 sequence_composition_difference,
 sequence_lengths,
@@ -24,6 +27,29 @@ split_sequences,
 symbols_in_sequences,
 sequences_to_numerical_properties
           
+PDB_AA_to_1_letter_code = 
+Dict(
+"ALA" => "A",
+"ARG" => "R",
+"ASN" => "N",
+"ASP" => "D",
+"CYS" => "C",
+"GLN" => "Q",
+"GLU" => "E",
+"GLY" => "G",
+"HIS" => "H",
+"ILE" => "I",
+"LEU" => "L",
+"LYS" => "K",
+"MET" => "M",
+"PHE" => "F",
+"PRO" => "P",
+"SER" => "S",
+"THR" => "T",
+"TRP" => "W",
+"TYR" => "Y",
+"VAL" => "V"
+)
 
 """
 Input: fasta data read with FastaIO function readfasta
@@ -55,6 +81,8 @@ Input:
 
 - optionally: remove sequences with a length different from a required length (default: required_length = 0, i.e. option switched off)
 
+    - Consider also using the rectangularize_alignment command as a way to produce alignment with homogeneous lengths
+    
 Output:
 
 - Cleaned-up fasta (works with a copy of the original data)
@@ -292,12 +320,17 @@ end
     Computes column labels of a multiple sequence alignment based on a reference sequence
 
     Input:
+
     - label of reference sequence (FASTA header without "")
+
     - array of all labels (1D ASCII string array)
+
     - sequence array (2D ASCII array)
 
     Output: Labels for each column:
+
     - columns in which the reference sequence has a letter are labelled with the number of this letter in the sequence (without gaps)
+
     - columns in which the reference sequence has a gap are labelled with the number of the closest left neighbor letter and the number of gap symbols to the current column
 """
 
@@ -330,7 +363,7 @@ end
 
     Output:
     writes a fasta file with given labels as headers
-"""   
+"""
 function export_fasta(
                                 filename::ASCIIString,
                                 labels::Array{ASCIIString,1},
@@ -549,6 +582,134 @@ Output:
 """
 function sequence_lengths(fasta::Array{Any,1})
     countmap(map(x->length(fasta[x][2]), 1:length(fasta)))
+end
+
+"""
+Input:
+         
+         - pdb_input: pdb file name
+         
+         - fasta_out_name: fasta output file name
+
+         - fasta header: header of fasta output file
+
+Output:
+
+         - fasta file with sequence extracted from pdb input and interpreted as single chain
+"""
+function PDB_to_single_chain_fasta(
+                                   pdb_input::ASCIIString,
+                                   fasta_out_name::ASCIIString,
+                                   fasta_header::ASCIIString
+                                   )
+    pdb = read(pdb_input,PDB)
+    CAs = collectatoms(pdb, calphaselector)
+    seq = (map(i -> PDB_AA_to_1_letter_code[CAs[i].res_name], 1:length(CAs)))'
+    export_fasta(fasta_out_name, [fasta_header], seq)
+end
+
+"""
+Given a PDB of a protein (interpreted as single chain) and a MSA of sequences related to this protein, the function computes a table of distances and Direct Coupling Analysis (DCA) scores for all Calpha pairs.
+
+Input:
+
+    - pdb_file: name of PDB file
+
+    - msa_file: name of MSA file
+
+    - clean_up_msa=true (default): apply some clean-up on the MSA, e.g. give all columns the same lengths, remove rows (=sequences) with non-AA symbols. To switch this off, use clean_up_msa=false.
+
+    - remove_last_char=false (default): sometimes fasta blocks in MSA are finished with a "*" symbol. If remove_last_char=true, the last symbol is removed from all fasta blocks (one per block).
+
+    - dca_type="gDCA_FRN" (default): use package GaussDCA with Frobenius norm as score. Alternative is currently: "gDCA_DI" (direct information).
+    
+"""
+function compute_distances_dca_scores_table(
+                pdb_file::ASCIIString, 
+                msa_file::ASCIIString;
+                clean_up_msa::Bool=true,
+                remove_last_char::Bool=false, #remove last char of each fasta block
+                dca_type::ASCIIString="gDCA_FRN"
+            )
+    
+    #read pdb file and extract a fasta file -> write fasta
+    pdb_fasta_file = pdb_file*".fa"
+    PDB_to_single_chain_fasta(pdb_file, pdb_fasta_file, pdb_file)
+
+    #if requested: clean up MSA and write file with cleaned-up 
+    if clean_up_msa
+        seq = readfasta(msa_file)
+        clean_seq = clean_sequences(seq, remove_last_char=remove_last_char)
+        rect_seq = rectangularize_alignment(clean_seq)
+        msa_file = msa_file*"_clean.fa"
+        export_fasta(msa_file, get_sequence_labels(clean_seq), rect_seq)
+    end
+    
+    #compute DCA based on current MSA
+    if dca_type == "gDCA_FRN"
+        dca_out = gDCA(msa_file)
+    elseif dca_type == "gDCA_DI"
+        dca_out = gDCA(msa_file, pseudocount=0.2, score=:DI)
+    end
+
+    #put DCA results in data frame for later join
+    n_dca = length(dca_out)
+    dca_df = DataFrame(
+        i_dca = map(i->dca_out[i][1],1:n_dca),
+        j_dca = map(i->dca_out[i][2],1:n_dca),
+        score = map(i->dca_out[i][3],1:n_dca)
+    )
+    
+    #prepare computation of Calpha-Calpha distances
+    struct = read(pdb_file,PDB)
+    struct_ca = collectatoms(struct,calphaselector)
+    
+    #generate MSA from MSA file and pdb-fasta, with pdb-fasta as last entry
+    msa_out = (splitdir(pdb_file)[end])*(splitdir(msa_file)[end])
+    run(pipeline(`mafft --add $pdb_fasta_file $msa_file`, stdout=msa_out))
+
+    #find mapping of pdb-fasta to MSA columns necessary to map distances to DCA scores
+    struct_msa = readfasta(msa_out)
+    rect_struct_msa = rectangularize_alignment(struct_msa)
+
+    seq_struct_ali = collect(rect_struct_msa[end,:])
+    seq_struct = seq_struct_ali[find(x->x!="-", seq_struct_ali)]
+    indices = zeros(Int64,length(seq_struct))
+    j = 1
+    for i in 1:length(seq_struct_ali)
+        if (seq_struct_ali[i]!="-")
+            indices[j]=i
+            j += 1
+        end
+    end
+    #indices contains now the indices of the columns in which the pdb-fasta residues are
+    
+    
+    #generate data frame of Calpha-Calpha distances
+    n_ca = length(struct_ca)
+    n_pairs = round(Int64,n_ca*(n_ca-1)/2)
+
+    Dij = DataFrame()
+    Dij[:ix] = zeros(Int64,n_pairs)
+    Dij[:jx] = zeros(Int64,n_pairs)
+    Dij[:i_dca] = zeros(Int64,n_pairs)
+    Dij[:j_dca] = zeros(Int64,n_pairs)
+    Dij[:dij]=zeros(n_pairs)
+    k=1
+    for i in 1:(n_ca-1)
+        for j in (i+1):n_ca
+            dr = struct_ca[i].coords-struct_ca[j].coords
+            Dij[k,:dij] = sqrt(dot(dr,dr))
+            Dij[k,:ix] = i
+            Dij[k,:jx] = j
+            Dij[k,:i_dca] = indices[i]
+            Dij[k,:j_dca] = indices[j] 
+            k += 1
+        end
+    end
+    
+    #join data frame with distances and DCA scores
+    Dij = join(Dij, dca_df, on=[:i_dca,:j_dca])
 end
 
 end # module
