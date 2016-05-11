@@ -667,15 +667,20 @@ function compute_distances_dca_scores_table(
         msa_file = msa_file*"_clean.fa"
         export_fasta(msa_file, get_sequence_labels(clean_seq), rect_seq)
     end
-    
+
+    #generate MSA from MSA file and pdb-fasta, with pdb-fasta as last entry
+    msa_out = (splitdir(pdb_file)[end])*(splitdir(msa_file)[end])
+    run(pipeline(`mafft --add $pdb_fasta_file $msa_file`, stdout=msa_out))
+
     #compute DCA based on current MSA
     dca_out = 0
     if dca_type == "gDCA_FRN"
-        dca_out = gDCA(msa_file)
+        dca_out = gDCA(msa_out)
     elseif dca_type == "gDCA_DI"
-        dca_out = gDCA(msa_file, pseudocount=0.2, score=:DI)
+        dca_out = gDCA(msa_out, pseudocount=0.2, score=:DI)
     else # the DCA has been computed beforehand; dca_type is interpreted as name
          # of file that contains tuples (i,j,score)
+        error("external DCA currently not available")
         external = readdlm(dca_type,';')
         n = length(external)
         dca_out = Array{Any,1}(n)
@@ -697,10 +702,6 @@ function compute_distances_dca_scores_table(
     struct = read(pdb_file,PDB)
     struct_ca = collectatoms(struct,calphaselector)
     
-    #generate MSA from MSA file and pdb-fasta, with pdb-fasta as last entry
-    msa_out = (splitdir(pdb_file)[end])*(splitdir(msa_file)[end])
-    run(pipeline(`mafft --add $pdb_fasta_file $msa_file`, stdout=msa_out))
-
     #find mapping of pdb-fasta to MSA columns necessary to map distances to DCA scores
     struct_msa = readfasta(msa_out)
     rect_struct_msa = rectangularize_alignment(struct_msa)
