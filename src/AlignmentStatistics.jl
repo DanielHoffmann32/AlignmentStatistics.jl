@@ -16,6 +16,7 @@ get_sequence_labels,
 majority_consensus,
 PDB_AA_to_1_letter_code,
 PDB_to_single_chain_fasta,
+random_rows_from_msa,
 read_AAindex1,
 rectangularize_alignment,
 reference_sequence_column_labels,
@@ -121,6 +122,25 @@ function clean_sequences(fasta::Array{Any,1};
         end
     end
     return new_fasta[clean_seqs]
+end
+
+"""
+Input:
+
+- fasta_msa: MSA as read with readfasta of FastaIO
+
+- n_select: number of rows to be selected
+
+Output:
+
+- MSA in fasta format consisting of n_select rows of fasta_msa
+"""
+function random_rows_from_msa(fasta_msa::Array{Any,1}, n_select::Int64)
+    n_rows = length(fasta_msa)
+    if n_select >= n_rows
+        error("requested more random rows than available")
+    end
+    fasta_msa[sample(1:n_rows, n_select, replace=false)]
 end
 
 """
@@ -586,7 +606,7 @@ end
 
 """
 Input:
-         
+
          - pdb_input: pdb file name
          
          - fasta_out_name: fasta output file name
@@ -621,8 +641,11 @@ Input:
 
     - remove_last_char=false (default): sometimes fasta blocks in MSA are finished with a "*" symbol. If remove_last_char=true, the last symbol is removed from all fasta blocks (one per block).
 
-    - dca_type="gDCA_FRN" (default): use package GaussDCA with Frobenius norm as score. Alternative is currently: "gDCA_DI" (direct information).
-    
+    - dca_type="gDCA_FRN" (default): use package GaussDCA with Frobenius norm as score. Alternative are currently: "gDCA_DI" (direct information), and a file name from which an externally computed DCA output can be read (text array of tuples (i,j,score)).
+
+Output:
+
+    - data frame with columns i, j, dij (=Calpha-Calpha distance), score (=DCA score)
 """
 function compute_distances_dca_scores_table(
                 pdb_file::ASCIIString, 
@@ -646,10 +669,20 @@ function compute_distances_dca_scores_table(
     end
     
     #compute DCA based on current MSA
+    dca_out = 0
     if dca_type == "gDCA_FRN"
         dca_out = gDCA(msa_file)
     elseif dca_type == "gDCA_DI"
         dca_out = gDCA(msa_file, pseudocount=0.2, score=:DI)
+    else # the DCA has been computed beforehand; dca_type is interpreted as name
+         # of file that contains tuples (i,j,score)
+        external = readdlm(dca_type,';')
+        n = length(external)
+        dca_out = Array{Any,1}(n)
+        for ix in 1:n
+            s = split(external[ix],['(',',',')'])
+            dca_out[ix]= (parse(s[2]),parse(s[3]),parse(s[4]))
+        end
     end
 
     #put DCA results in data frame for later join
