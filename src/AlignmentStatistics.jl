@@ -641,18 +641,21 @@ Input:
 
     - remove_last_char=false (default): sometimes fasta blocks in MSA are finished with a "*" symbol. If remove_last_char=true, the last symbol is removed from all fasta blocks (one per block).
 
-    - dca_type="gDCA_FRN" (default): use package GaussDCA with Frobenius norm as score. Alternative are currently: "gDCA_DI" (direct information), and a file name from which an externally computed DCA output can be read (text array of tuples (i,j,score)).
+    - dca_type="gDCA_FRN" (default): use package GaussDCA with Frobenius norm as score. Alternative are currently: "gDCA_DI" (direct information), and a file name from which an externally computed DCA output can be read (text array of tuples (i,j,score)) [the latter is currently not available].
 
+    - contact_threshold=8 (default): contact threshold in Angstrom
+    
 Output:
 
-    - data frame with columns i, j, dij (=Calpha-Calpha distance), score (=DCA score)
+    - data frame with columns i, j, dij (=Calpha-Calpha distance), score (=DCA score), contact, true_positive_rate
 """
 function compute_distances_dca_scores_table(
                 pdb_file::ASCIIString, 
                 msa_file::ASCIIString;
                 clean_up_msa::Bool=true,
                 remove_last_char::Bool=false, #remove last char of each fasta block
-                dca_type::ASCIIString="gDCA_FRN"
+                dca_type::ASCIIString="gDCA_FRN",
+                contact_threshold::Float64=8.0
             )
     
     #read pdb file and extract a fasta file -> write fasta
@@ -744,6 +747,12 @@ function compute_distances_dca_scores_table(
     
     #join data frame with distances and DCA scores
     Dij = join(Dij, dca_df, on=[:i_dca,:j_dca])
+    Dij = sort(Dij, cols = [:score], rev=true)
+    
+    Dij[:contact] = (Dij[:dij] .<= contact_threshold)
+    Dij[:true_positive_rate] = cumsum(Dij[:contact]) ./ (1:length(Dij[:contact]))
+
+    Dij
 end
 
 end # module
