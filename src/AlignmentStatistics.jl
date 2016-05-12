@@ -1,7 +1,7 @@
 module AlignmentStatistics
 
 # package code goes here
-using Bio, Bio.Structure, FastaIO, StatsBase, HypothesisTests, PValueAdjust,
+using Bio, FastaIO, StatsBase, HypothesisTests, PValueAdjust,
 DataFrames, Distributions, GaussDCA
 
 export AAindex1_to_Dict,
@@ -747,11 +747,17 @@ function compute_distances_dca_scores_table(
     
     #join data frame with distances and DCA scores
     Dij = join(Dij, dca_df, on=[:i_dca,:j_dca])
+
+    #sort according to decreasing DCA scores
     Dij = sort(Dij, cols = [:score], rev=true)
-    
+
+    #add contact columns
     Dij[:contact] = (Dij[:dij] .<= contact_threshold)
+
+    #compute true positive rate up to distance pair i, j
     Dij[:true_positive_rate] = cumsum(Dij[:contact]) ./ (1:length(Dij[:contact]))
 
+    #output
     Dij
 end
 
