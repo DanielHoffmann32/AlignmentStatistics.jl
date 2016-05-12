@@ -1,7 +1,7 @@
 module AlignmentStatistics
 
 # package code goes here
-using Bio, FastaIO, StatsBase, HypothesisTests, PValueAdjust,
+using Bio, Bio.Structure, FastaIO, StatsBase, HypothesisTests, PValueAdjust,
 DataFrames, Distributions, GaussDCA
 
 export AAindex1_to_Dict,
