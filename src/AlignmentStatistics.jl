@@ -7,6 +7,8 @@ DataFrames, Distributions, GaussDCA
 export AAindex1_to_Dict,
 binomial_CIs,
 clean_sequences,
+compute_distances_dca_scores_table,
+dca_with_reference_sequence,
 Dirichlet_K3,
 export_fasta,
 extract_label_element,
@@ -709,6 +711,7 @@ function compute_distances_dca_scores_table(
     struct_msa = readfasta(msa_out)
     rect_struct_msa = rectangularize_alignment(struct_msa)
 
+         #the structure-sequence is the last sequence in the MSA
     seq_struct_ali = collect(rect_struct_msa[end,:])
     seq_struct = seq_struct_ali[find(x->x!="-", seq_struct_ali)]
     indices = zeros(Int64,length(seq_struct))
@@ -759,6 +762,79 @@ function compute_distances_dca_scores_table(
 
     #output
     Dij
+end
+
+"""
+Given an MSA of sequences of a protein and a reference sequence in that MSA given by the fasta header (without initial ">") the function computes DCA scores and provides the corresponding pair indices of the reference sequence in the output data frame.
+
+Input:
+
+    - msa_file: name of MSA file
+
+    - reference_header: fasta header of reference sequence (without initial ">")
+
+    - clean_up_msa=true (default): apply some clean-up on the MSA, e.g. give all columns the same lengths, remove rows (=sequences) with non-AA symbols. To switch this off, use clean_up_msa=false.
+
+    - remove_last_char=false (default): sometimes fasta blocks in MSA are finished with a "*" symbol. If remove_last_char=true, the last symbol is removed from all fasta blocks (one per block).
+
+    - dca_type="gDCA_FRN" (default): use package GaussDCA with Frobenius norm as score. Alternative are currently: "gDCA_DI" (direct information), and a file name from which an externally computed DCA output can be read (text array of tuples (i,j,score)) [the latter is currently not available].
+
+    - data frame with columns iref, jref, imsa, jmsa, score (=DCA score), 
+"""
+function dca_with_reference_sequence(
+                reference_label::ASCIIString,                     
+                msa_file::ASCIIString;
+                clean_up_msa::Bool=true,
+                remove_last_char::Bool=false, #remove last char of each fasta block
+                dca_type::ASCIIString="gDCA_FRN"
+            )
+    
+    #if requested: clean up MSA and write file with cleaned-up 
+    if clean_up_msa
+        seq = readfasta(msa_file)
+        clean_seq = clean_sequences(seq, remove_last_char=remove_last_char)
+        rect_seq = rectangularize_alignment(clean_seq)
+        msa_file = msa_file*"_clean.fa"
+        export_fasta(msa_file, get_sequence_labels(clean_seq), rect_seq)
+    end
+
+    #compute DCA based on MSA
+    dca_out = 0
+    if dca_type == "gDCA_FRN"
+        dca_out = gDCA(msa_file)
+    elseif dca_type == "gDCA_DI"
+        dca_out = gDCA(msa_file, pseudocount=0.2, score=:DI)
+    else # the DCA has been computed beforehand; dca_type is interpreted as name
+         # of file that contains tuples (i,j,score)
+        error("external DCA currently not available")
+        external = readdlm(dca_type,';')
+        n = length(external)
+        dca_out = Array{Any,1}(n)
+        for ix in 1:n
+            s = split(external[ix],['(',',',')'])
+            dca_out[ix]= (parse(s[2]),parse(s[3]),parse(s[4]))
+        end
+    end
+
+    #put DCA results in data frame for later join
+    n_dca = length(dca_out)
+    dca_df = DataFrame(
+        imsa = map(i->dca_out[i][1],1:n_dca),
+        jmsa = map(i->dca_out[i][2],1:n_dca),
+        score = map(i->dca_out[i][3],1:n_dca)
+    )
+    
+    #rectangularize MSA and compute reference
+    msa = readfasta(msa_file)
+    rect_msa = rectangularize_alignment(msa)
+    labels = get_sequence_labels(msa)
+    ref_cols = reference_sequence_column_labels(reference_label, labels, rect_msa)
+
+    dca_df[:iref] = ref_cols[dca_df[:imsa]]
+    dca_df[:jref] = ref_cols[dca_df[:jmsa]]    
+  
+    dca_df
+
 end
 
 end # module
