@@ -1,7 +1,7 @@
 module AlignmentStatistics
 
 # package code goes here
-using Bio, Bio.Structure, FastaIO, StatsBase, HypothesisTests, PValueAdjust,
+using Bio, Bio.Structure, FastaIO, StatsBase, HypothesisTests, MultipleTesting,
 DataFrames, Distributions, GaussDCA
 
 export AAindex1_to_Dict,
@@ -93,7 +93,7 @@ Output:
 """
 function clean_sequences(fasta::Array{Any,1};
                          remove_last_char::Bool=false,
-                         remove_seqs_with::Array{ASCIIString,1}=["X","#","*"],
+                         remove_seqs_with::Array{String,1}=["X","#","*"],
                          required_length::Int64=0)
     n_seqs=length(fasta)
     new_fasta = copy(fasta)
@@ -191,7 +191,7 @@ end
 Returns sequence labels from sequences read with FastaIO.readall (without the leading '>').
 """
 function get_sequence_labels(raw_ali::Array{Any,1})
-    return convert(Array{ASCIIString,1},map(x -> x[1], raw_ali[1:end]))
+    return convert(Array{String,1},map(x -> x[1], raw_ali[1:end]))
 end
 
 
@@ -206,7 +206,7 @@ Output: array of three components:
 
 (3) relative frequency of majority symbols (absolute / n_rows).
 """
-function majority_consensus(seqs::Array{ASCIIString,2})
+function majority_consensus(seqs::Array{String,2})
 
     n_rows, n_cols = size(seqs)
 
@@ -229,22 +229,22 @@ Input: sequence (ASCIIArray)
 
 Output: dictionary of sequence composition
 """
-function sequence_composition(seq::Array{ASCIIString,1})
+function sequence_composition(seq::Array{String,1})
     return countmap(seq)
 end
 
 """
 Input:
 
-(1) ASCIIString array of sequence labels (eg from FASTA header)
+(1) String array of sequence labels (eg from FASTA header)
 
 (2) delimiter character
 
 (3) number of element to be extracted
 
-Output: array of extracted label elements (ASCIIStrings)
+Output: array of extracted label elements (Strings)
 """
-function extract_label_element(labels::Array{ASCIIString,1}, delim::ASCIIString, elno::Int64)
+function extract_label_element(labels::Array{String,1}, delim::String, elno::Int64)
     return map(x -> x[elno], map(x -> split(x,delim), labels))
 end
 
@@ -254,7 +254,7 @@ Input: array of labels.
 
 Output: 2D array with labels in first row and frequencies in second, sorted according to decreasing frequency.
 """
-function sorted_label_frequencies(labels::Array{ASCIIString, 1})
+function sorted_label_frequencies(labels::Array{String, 1})
     label_counts = countmap(labels)
     p = sortperm(collect(values(label_counts)),rev=true)
     return permute!(collect(keys(label_counts)), p), permute!(collect(values(label_counts)), p)
@@ -264,9 +264,9 @@ end
 """
 Input:
 
-(1) symbols: sequence of symbols (ASCIIString) of the same length as each of the sequences in seqs.
+(1) symbols: sequence of symbols (String) of the same length as each of the sequences in seqs.
 
-(2) seqs: rectangular set of sequences (2D ASCIIString array)
+(2) seqs: rectangular set of sequences (2D String array)
 
 Output:
 
@@ -275,7 +275,7 @@ Output:
 (2) relative frequency of symbols in respective columns of seqs (absolute / n_rows).
 
 """
-function symbols_in_sequences(symbols::Array{ASCIIString,1}, seqs::Array{ASCIIString,2})
+function symbols_in_sequences(symbols::Array{String,1}, seqs::Array{String,2})
 
     n_rows, n_cols = size(seqs)
 
@@ -302,9 +302,9 @@ Output: p-values from Fisher's exact test carried out for each column;
     n_ref_sym_i(seqsBi), n_rows_B - n_ref_sym_i(seqsBi)    
 """
 function Fisher_test_sequence_sets(
-    seqsA::Array{ASCIIString,2}, 
-    seqsB::Array{ASCIIString,2},
-    ref_syms::Array{ASCIIString,1};
+    seqsA::Array{String,2}, 
+    seqsB::Array{String,2},
+    ref_syms::Array{String,1};
     FDR::Bool=false,
     tail=:both
 )
@@ -331,7 +331,7 @@ function Fisher_test_sequence_sets(
     end
 
     if FDR==true #if user wishes FDR correction for multiple testing
-        return PValueAdjust.padjust(pvals, BenjaminiHochberg)
+        return adjust(pvals, BenjaminiHochberg())
     else #no correction
         return pvals
     end
@@ -356,9 +356,9 @@ end
     - columns in which the reference sequence has a gap are labelled with the number of the closest left neighbor letter and the number of gap symbols to the current column
 """
 
-function reference_sequence_column_labels(ref_label::ASCIIString,
-                                          labels::Array{ASCIIString,1},
-                                          seqs::Array{ASCIIString,2})
+function reference_sequence_column_labels(ref_label::String,
+                                          labels::Array{String,1},
+                                          seqs::Array{String,2})
     ref_seq = vec(seqs[labels .== ref_label,:])
     ali_len = length(ref_seq)
     res_num = 0
@@ -380,16 +380,16 @@ end
 """
     Input:
     - filename for fasta export
-    - label vector (1D ASCIIString array)
-    - sequence vector (2D ASCIIString array)
+    - label vector (1D String array)
+    - sequence vector (2D String array)
 
     Output:
     writes a fasta file with given labels as headers
 """
 function export_fasta(
-                                filename::ASCIIString,
-                                labels::Array{ASCIIString,1},
-                                seqs::Array{ASCIIString,2}
+                                filename::String,
+                                labels::Array{String,1},
+                                seqs::Array{String,2}
                                 )
     n_seqs = length(labels)
     to_export = Array(Any,n_seqs)
@@ -544,7 +544,7 @@ RNAs = ["A";"C";"G";"U"]
 
 """
 Input:
-         - string s (either ASCIIString or Array{ASCIIString,1})
+         - string s (either String or Array{String,1})
          - alphabet
 
 Output:
@@ -557,11 +557,11 @@ Output:
          The absolute frequency is lower than the number of characters in s if s
              contains characters that are not elements of the alphabet.
 """
-function sequence_composition(s::Any, alphabet::Array{ASCIIString,1})
-    if typeof(s)==ASCIIString
+function sequence_composition(s::Any, alphabet::Array{String,1})
+    if typeof(s)==String
         a = split(s,"")
-    elseif typeof(s) != Array{ASCIIString,1}
-        error("input has to be ASCIIString or Array{ASCIIString,1}")
+    elseif typeof(s) != Array{String,1}
+        error("input has to be String or Array{String,1}")
     end 
     n = length(alphabet)
     c = zeros(Int64,n)
@@ -620,9 +620,9 @@ Output:
          - fasta file with sequence extracted from pdb input and interpreted as single chain
 """
 function PDB_to_single_chain_fasta(
-                                   pdb_input::ASCIIString,
-                                   fasta_out_name::ASCIIString,
-                                   fasta_header::ASCIIString
+                                   pdb_input::String,
+                                   fasta_out_name::String,
+                                   fasta_header::String
                                    )
     pdb = read(pdb_input,PDB)
     CAs = collectatoms(pdb, calphaselector)
@@ -652,11 +652,11 @@ Output:
     - data frame with columns i, j, dij (=Calpha-Calpha distance), score (=DCA score), contact, true_positive_rate
 """
 function compute_distances_dca_scores_table(
-                pdb_file::ASCIIString, 
-                msa_file::ASCIIString;
+                pdb_file::String, 
+                msa_file::String;
                 clean_up_msa::Bool=true,
                 remove_last_char::Bool=false, #remove last char of each fasta block
-                dca_type::ASCIIString="gDCA_FRN",
+                dca_type::String="gDCA_FRN",
                 contact_threshold::Float64=8.0
             )
     
@@ -782,11 +782,11 @@ Input:
     - data frame with columns iref, jref, imsa, jmsa, score (=DCA score), 
 """
 function dca_with_reference_sequence(
-                reference_label::ASCIIString,                     
-                msa_file::ASCIIString;
+                reference_label::String,                     
+                msa_file::String;
                 clean_up_msa::Bool=true,
                 remove_last_char::Bool=false, #remove last char of each fasta block
-                dca_type::ASCIIString="gDCA_FRN"
+                dca_type::String="gDCA_FRN"
             )
     
     #if requested: clean up MSA and write file with cleaned-up 
