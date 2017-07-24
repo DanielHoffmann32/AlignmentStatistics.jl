@@ -398,6 +398,28 @@ function export_fasta(
     writefasta(filename, to_export)
 end
 
+"""
+     Input:
+     - filename for fasta export
+     - label vector (1D String array)
+     - sequence vector (array of String arrays)
+
+     Output:
+     writes a fasta file with given labels as headers
+"""
+function export_fasta(
+                                filename::String,
+                                labels::Array{String,1},
+                                seqs::Array{String,1}
+                                )
+    n_seqs = length(labels)
+    to_export = Array{Any}(n_seqs)
+    for i in 1:n_seqs
+        to_export[i] = (labels[i], seqs[i])
+    end
+    writefasta(filename, to_export)
+end
+
 # """
 #     Input:
 #     - array of successes x (Int64)
